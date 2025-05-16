@@ -1,0 +1,190 @@
+Sacco Mobile Application
+STEPS 
+
+Backend: Django (Sacco & Merchant Transactions API)
+SH
+pip install django djangorestframework django-cors-headers
+
+1. Initialize Django Project
+
+sh
+django-admin startproject sacco_project
+cd sacco_project
+python manage.py startapp sacco_app
+
+2. Define Models (models.py)
+python
+from django.db import models
+
+class Member(models.Model):
+    name = models.CharField(max_length=255)
+    sacco_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    loyalty_points = models.IntegerField(default=0)
+
+class Merchant(models.Model):
+    name = models.CharField(max_length=255)
+    location = models.CharField(max_length=255)
+
+class Transaction(models.Model):
+    member = models.ForeignKey(Member, on_delete=models.CASCADE)
+    merchant = models.ForeignKey(Merchant, on_delete=models.CASCADE)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+3. Define Serializers (serializers.py)
+
+python
+from rest_framework import serializers
+from .models import Member, Merchant, Transaction
+
+class MemberSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Member
+        fields = '__all__'
+
+class MerchantSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Merchant
+        fields = '__all__'
+
+class TransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Transaction
+        fields = '__all__'
+
+4. Create Views (views.py)
+python
+from rest_framework import viewsets
+from .models import Member, Merchant, Transaction
+from .serializers import MemberSerializer, MerchantSerializer, TransactionSerializer
+
+class MemberViewSet(viewsets.ModelViewSet):
+    queryset = Member.objects.all()
+    serializer_class = MemberSerializer
+
+class MerchantViewSet(viewsets.ModelViewSet):
+    queryset = Merchant.objects.all()
+    serializer_class = MerchantSerializer
+
+class TransactionViewSet(viewsets.ModelViewSet):
+    queryset = Transaction.objects.all()
+    serializer_class = TransactionSerializer
+
+5. Define API Routes (urls.py)
+python
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import MemberViewSet, MerchantViewSet, TransactionViewSet
+
+router = DefaultRouter()
+router.register(r'members', MemberViewSet)
+router.register(r'merchants', MerchantViewSet)
+router.register(r'transactions', TransactionViewSet)
+
+urlpatterns = [
+    path('api/', include(router.urls)),
+]
+
+6. Configure Settings (settings.py)
+python
+INSTALLED_APPS = [
+    'rest_framework',
+    'corsheaders',
+    'sacco_app',
+]
+
+CORS_ALLOW_ALL_ORIGINS = True
+Run migrations:
+
+sh
+python manage.py migrate
+python manage.py runserver
+Frontend: Flutter (Member Dashboard & Merchant Payments)
+Install dependencies:
+
+sh
+flutter create sacco_app
+cd sacco_app
+flutter pub add http
+flutter pub add provider
+1. Setup API Calls (api.dart)
+dart
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+class ApiService {
+  final String baseUrl = 'http://127.0.0.1:8000/api/';
+
+  Future<List<dynamic>> getMembers() async {
+    final response = await http.get(Uri.parse('$baseUrl/members/'));
+    return jsonDecode(response.body);
+  }
+
+  Future<void> payMerchant(String memberId, String merchantId, double amount) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/transactions/'),
+      body: jsonEncode({'member': memberId, 'merchant': merchantId, 'amount': amount}),
+      headers: {"Content-Type": "application/json"},
+    );
+
+    if (response.statusCode == 201) {
+      print("Payment successful!");
+    } else {
+      print("Payment failed!");
+    }
+  }
+}
+2. Create Home Page (home.dart)
+dart
+import 'package:flutter/material.dart';
+import 'api.dart';
+
+void main() {
+  runApp(SaccoApp());
+}
+
+class SaccoApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: HomeScreen(),
+    );
+  }
+}
+
+class HomeScreen extends StatefulWidget {
+  @override
+  _HomeScreenState createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  ApiService apiService = ApiService();
+  List<dynamic> members = [];
+
+  @override
+  void initState() {
+    super.initState();
+    fetchMembers();
+  }
+
+  void fetchMembers() async {
+    members = await apiService.getMembers();
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("Sacco Mobile App")),
+      body: ListView.builder(
+        itemCount: members.length,
+        itemBuilder: (context, index) {
+          return ListTile(
+            title: Text(members[index]['name']),
+            subtitle: Text("Balance: \$${members[index]['sacco_balance']}"),
+          );
+        },
+      ),
+    );
+  }
+}
